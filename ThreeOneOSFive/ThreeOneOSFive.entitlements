@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- MHA-C2: required for iOS 26 container access -->
+    <key>com.apple.private.MobileContainerManager.allowed</key>
+    <true/>
+    <!-- BookmarkManager: Security-Scoped Folder Mounts (iOS 27+) -->
+    <key>com.apple.private.security.storage.AppDataContainers</key>
+    <true/>
+    <!-- Keychain groups: match bundle ID -->
+    <key>keychain-access-groups</key>
+    <array>
+        <string>$(AppIdentifierPrefix)com.apple.mobile.MobileHouseArrest</string>
+    </array>
+</dict>
+</plist>
