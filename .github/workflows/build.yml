@@ -1,0 +1,64 @@
+name: Build unsigned IPA
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode (latest available)
+        run: |
+          # Use latest Xcode available on the runner
+          XCODE=$(ls /Applications | grep Xcode | sort -V | tail -1)
+          echo "Using $XCODE"
+          sudo xcode-select -s "/Applications/$XCODE/Contents/Developer"
+          xcodebuild -version
+
+      - name: Build (unsigned)
+        run: |
+          xcodebuild \
+            -project ThreeOneOSFive.xcodeproj \
+            -scheme 3105 \
+            -destination "generic/platform=iOS" \
+            -configuration Release \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_ENTITLEMENTS="" \
+            PRODUCT_BUNDLE_IDENTIFIER="com.apple.mobile.MobileHouseArrest" \
+            SWIFT_OPTIMIZATION_LEVEL="-Onone" \
+            build 2>&1 | tee build.log | tail -50
+
+      - name: Show build errors if failed
+        if: failure()
+        run: grep -E "error:|warning:" build.log | head -50 || true
+
+      - name: Package IPA
+        run: |
+          APP=$(find ~/Library/Developer/Xcode/DerivedData \
+            -name "3105.app" -path "*/Release-iphoneos/*" 2>/dev/null | head -1)
+          if [ -z "$APP" ]; then
+            APP=$(find ~/Library/Developer/Xcode/DerivedData \
+              -name "*.app" -path "*/Release-iphoneos/*" 2>/dev/null | head -1)
+          fi
+          echo "Found app: $APP"
+          mkdir -p Payload
+          cp -r "$APP" Payload/
+          zip -r 3105-v3.0-unsigned.ipa Payload/
+          rm -rf Payload
+          ls -lh 3105-v3.0-unsigned.ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: 3105-v3.0-unsigned-ios27
+          path: 3105-v3.0-unsigned.ipa
+          retention-days: 90
