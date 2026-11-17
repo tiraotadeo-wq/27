@@ -1,4 +1,4 @@
-name: Build unsigned IPA
+name: Build IPA
 
 on:
   push:
@@ -14,15 +14,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Select Xcode (latest available)
+      - name: Select Xcode
         run: |
-          # Use latest Xcode available on the runner
-          XCODE=$(ls /Applications | grep Xcode | sort -V | tail -1)
+          XCODE=$(ls /Applications | grep "^Xcode" | sort -V | tail -1)
           echo "Using $XCODE"
           sudo xcode-select -s "/Applications/$XCODE/Contents/Developer"
           xcodebuild -version
+          xcodebuild -showsdks | grep iphoneos || true
 
-      - name: Build (unsigned)
+      # ── GBox / sideload build (minimal entitlements, signable with any cert) ──
+      - name: Build – GBox/sideload
         run: |
           xcodebuild \
             -project ThreeOneOSFive.xcodeproj \
@@ -34,31 +35,26 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_ENTITLEMENTS="" \
             PRODUCT_BUNDLE_IDENTIFIER="com.apple.mobile.MobileHouseArrest" \
-            SWIFT_OPTIMIZATION_LEVEL="-Onone" \
-            build 2>&1 | tee build.log | tail -50
+            CONFIGURATION_BUILD_DIR="$PWD/build/gbox" \
+            build 2>&1 | tee build_gbox.log | grep -E "error:|warning:|BUILD" | head -80 || \
+            (grep "error:" build_gbox.log | head -30; exit 1)
 
-      - name: Show build errors if failed
-        if: failure()
-        run: grep -E "error:|warning:" build.log | head -50 || true
-
-      - name: Package IPA
+      - name: Package IPA – GBox
         run: |
-          APP=$(find ~/Library/Developer/Xcode/DerivedData \
-            -name "3105.app" -path "*/Release-iphoneos/*" 2>/dev/null | head -1)
+          APP=$(find "$PWD/build/gbox" -name "*.app" 2>/dev/null | head -1)
           if [ -z "$APP" ]; then
-            APP=$(find ~/Library/Developer/Xcode/DerivedData \
-              -name "*.app" -path "*/Release-iphoneos/*" 2>/dev/null | head -1)
+            APP=$(find ~/Library/Developer/Xcode/DerivedData -name "*.app" -path "*/Release-iphoneos/*" 2>/dev/null | head -1)
           fi
-          echo "Found app: $APP"
+          echo "App: $APP"
           mkdir -p Payload
           cp -r "$APP" Payload/
-          zip -r 3105-v3.0-unsigned.ipa Payload/
+          zip -r 3105-v3.0-gbox.ipa Payload/
           rm -rf Payload
-          ls -lh 3105-v3.0-unsigned.ipa
+          ls -lh 3105-v3.0-gbox.ipa
 
-      - name: Upload IPA artifact
+      - name: Upload IPA – GBox/sideload
         uses: actions/upload-artifact@v4
         with:
-          name: 3105-v3.0-unsigned-ios27
-          path: 3105-v3.0-unsigned.ipa
+          name: 3105-v3.0-gbox-sideload
+          path: 3105-v3.0-gbox.ipa
           retention-days: 90
